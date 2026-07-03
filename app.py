@@ -135,7 +135,7 @@ def generer_lettre(offre, key):
     """
     try:
         response = client.chat.completions.create(
-            model="openrouter/free"
+            model="openrouter/free",
             messages=[
                 {"role": "system", "content": "Tu es un consultant en recrutement."},
                 {"role": "user", "content": prompt}

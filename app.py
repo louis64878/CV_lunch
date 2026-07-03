@@ -52,6 +52,7 @@ def recuperer_offres(token):
     params = {
         "commune": "59350",          # Lille
         "motsCles": "restauration",
+        "typeContrat": "CDD,SAI"
         "publieeDepuis": "7",         # MODIFIÉ : 7 est une valeur autorisée (offres de la semaine)
         "range": "0-29"              # Récupère les 30 premières offres d'un coup
     }

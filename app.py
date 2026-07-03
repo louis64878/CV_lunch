@@ -56,7 +56,6 @@ def recuperer_offres_jooble(api_key):
     payload = {
         "keywords": "restauration",
         "location": "Lille, France",
-        "location": "Lille",
         "page": "1"
     }
     try:

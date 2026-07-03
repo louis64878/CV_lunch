@@ -49,10 +49,10 @@ def recuperer_offres(token):
     url = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search"
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
     params = {
-        "commune": "59350", # Lille
+        "commune": "59350",          # Lille
         "motsCles": "restauration",
-        "publieeDepuis": "10",
-        "range": "0-29"
+        "publieeDepuis": "7",         # MODIFIÉ : 7 est une valeur autorisée (offres de la semaine)
+        "range": "0-29"              # Récupère les 30 premières offres d'un coup
     }
     try:
         r = requests.get(url, headers=headers, params=params)

@@ -7,9 +7,9 @@ from openai import OpenAI
 st.set_page_config(page_title="Louis - Assistant Job d'Été", page_icon="💼", layout="wide")
 
 st.title("💼 Assistant de Recherche de Job d'Été à Lille")
-st.write("Ce bot recherche des jobs en restauration à Lille accessibles sans voiture et rédige vos lettres de motivation.")
+st.write("Ce bot recherche des contrats saisonniers en restauration pour le mois d'août à Lille, accessibles sans voiture.")
 
-# Barre latérale pour entrer les clés API de façon sécurisée
+# Barre latérale pour entrer les clés API
 st.sidebar.header("Configuration")
 openai_key = st.sidebar.text_input("Clé API OpenRouter", type="password", placeholder="sk-or-v1-...")
 ft_client_id = st.sidebar.text_input("Client ID France Travail", type="password")
@@ -22,7 +22,7 @@ PROFIL_LOUIS = {
     "telephone": "0768445324",
     "ville": "Lille",
     "etudes": "École d'ingénieur au CESI",
-    "disponibilite": "Disponible uniquement durant tout le mois d'août 2026",
+    "disponibilite": "Disponible uniquement durant tout le mois d'août 2026 (contrat de 1 mois complet)",
     "competences": "Restauration, service en salle, polyvalence, sens du contact, dynamique, rigoureux",
     "langues": "Français (Langue maternelle), Anglais (Courant)",
     "experiences": "Bénévole (organisation d'événements, vente), stages d'observation en entreprise (Airbus Atlantic, prothésiste)"
@@ -52,9 +52,9 @@ def recuperer_offres(token):
     params = {
         "commune": "59350",          # Lille
         "motsCles": "restauration",
-        "typeContrat": "CDD,SAI",
-        "publieeDepuis": "7",         # MODIFIÉ : 7 est une valeur autorisée (offres de la semaine)
-        "range": "0-29"              # Récupère les 30 premières offres d'un coup
+        "publieeDepuis": "14",        # Offres des 14 derniers jours pour élargir le choix
+        "typeContrat": "CDD,SAI",    # CDD et Saisonnier uniquement
+        "range": "0-49"              # Récupère jusqu'à 50 offres
     }
     try:
         r = requests.get(url, headers=headers, params=params)
@@ -68,12 +68,41 @@ def recuperer_offres(token):
 
 def filtrer_offres(offres):
     valides = []
-    exclusions = ["permis b exigé", "véhicule indispensable", "permis obligatoire", "voiture personnelle", "permis b obligatoire"]
+    
+    # Listes de filtres d'exclusion
+    exclusions_alternance = ["alternance", "apprentissage", "professionnalisation", "contrat pro", "apprenti", "alternant"]
+    exclusions_voiture = ["permis b exigé", "véhicule indispensable", "permis obligatoire", "voiture personnelle", "permis b obligatoire"]
+    exclusions_longs_contrats = ["6 mois", "12 mois", "un an", "1 an", "2 ans", "longue durée"]
+
     for item in offres:
         titre = item.get("intitule", "").lower()
         desc = item.get("description", "").lower()
-        if not any(mot in desc or mot in titre for mot in exclusions):
-            valides.append(item)
+        is_alternance = item.get("alternance", False) # Détection de l'alternance par l'API
+
+        # 1. Exclure si l'offre est officiellement une alternance
+        if is_alternance:
+            continue
+
+        # 2. Exclure si des mots-clés d'alternance sont présents
+        if any(mot in titre or mot in desc for mot in exclusions_alternance):
+            continue
+
+        # 3. Exclure si l'offre exige un permis ou un véhicule
+        if any(mot in titre or mot in desc for mot in exclusions_voiture):
+            continue
+
+        # 4. Exclure si l'offre mentionne explicitement un contrat de longue durée
+        if any(mot in desc for mot in exclusions_longs_contrats):
+            continue
+
+        # Sauvegarde des offres nettoyées
+        valides.append({
+            "id": item.get("id"),
+            "titre": item.get("intitule"),
+            "entreprise": item.get("entreprise", {}).get("nom", "Non spécifié"),
+            "lieu": item.get("lieu", {}).get("libelle", "Lille"),
+            "description": item.get("description", "")
+        })
     return valides
 
 def generer_lettre(offre, key):
@@ -83,21 +112,26 @@ def generer_lettre(offre, key):
         default_headers={"HTTP-Referer": "http://localhost:3000", "X-Title": "CV Bot Louis"}
     )
     prompt = f"""
-    Rédige une lettre de motivation professionnelle pour un job d'été en restauration.
+    Rédige une lettre de motivation professionnelle et percutante pour un job d'été d'un mois en restauration.
     
     Candidat :
     - Nom : {PROFIL_LOUIS['nom']}
     - Profil : Étudiant en école d'ingénieur au CESI. Recherche un job d'été (restauration/accueil) à Lille.
+    - Disponibilité : {PROFIL_LOUIS['disponibilite']} (disponible immédiatement et uniquement du 1er au 31 août 2026).
     - Compétences : {PROFIL_LOUIS['competences']}
     - Expériences : {PROFIL_LOUIS['experiences']}
     - Contact : {PROFIL_LOUIS['email']} | {PROFIL_LOUIS['telephone']}
     
     Offre :
-    - Poste : {offre.get('intitule')}
-    - Entreprise : {offre.get('entreprise', {}).get('nom', 'L\'établissement')}
-    - Description : {offre.get('description', '')[:1000]}
+    - Poste : {offre.get('titre')}
+    - Entreprise : {offre.get('entreprise')}
+    - Description : {offre.get('description')[:1000]}
     
-    Instructions : Rédige en français, sois poli, professionnel et motivé. Précise que tu habites à Lille et que tu utilises les transports en commun (pas besoin de voiture). Fais court (200 mots).
+    Instructions :
+    - Rédige en français. Sois poli, dynamique et motivé.
+    - Précise que tu habites à Lille et que tu utilises les transports en commun métro/bus (pas besoin de voiture).
+    - IMPORTANT : Explique très clairement au recruteur que tu proposes tes services spécifiquement pour le mois d'août 2026 pour un contrat de 1 mois (idéal pour un remplacement de vacances ou un renfort saisonnier).
+    - Fais court (environ 200 mots).
     """
     try:
         response = client.chat.completions.create(
@@ -123,14 +157,14 @@ else:
                 offres_brutes = recuperer_offres(token)
                 offres_valides = filtrer_offres(offres_brutes)
                 st.session_state["offres_web"] = offres_valides
-                st.success(f"{len(offres_valides)} offres trouvées !")
+                st.success(f"{len(offres_valides)} offres valides trouvées (CDD courts, sans voiture, hors alternance) !")
 
 # Affichage des résultats
 if "offres_web" in st.session_state and st.session_state["offres_web"]:
     for index, offre in enumerate(st.session_state["offres_web"]):
-        titre = offre.get('intitule')
-        entreprise = offre.get('entreprise', {}).get('nom', 'Non spécifié')
-        lieu = offre.get('lieu', {}).get('libelle', 'Lille')
+        titre = offre.get('titre')
+        entreprise = offre.get('entreprise')
+        lieu = offre.get('lieu')
         
         with st.expander(f"📌 {titre} - {entreprise} ({lieu})"):
             st.write(f"**Lien officiel :** [Consulter l'offre sur France Travail](https://candidat.pole-emploi.fr/offres/recherche/detail/{offre.get('id')})")

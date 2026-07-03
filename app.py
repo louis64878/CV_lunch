@@ -131,7 +131,7 @@ if "offres_web" in st.session_state and st.session_state["offres_web"]:
         lieu = offre.get('lieu', {}).get('libelle', 'Lille')
         
         with st.expander(f"📌 {titre} - {entreprise} ({lieu})"):
-            st.write(f"**Lien officiel :** [Consulter l'offre sur France Travail](https://www.francetravail.fr/candidat/les-offres/recherche.html?action=detailoffredemploi&idOffre={offre.get('id')})")
+            st.write(f"**Lien officiel :** [Consulter l'offre sur France Travail](https://candidat.pole-emploi.fr/offres/recherche/detail/{offre.get('id')})")
             st.text_area("Description du poste", offre.get("description", ""), height=150, disabled=True, key=f"desc_{offre.get('id')}")
             
             if st.button("✨ Rédiger ma lettre de motivation", key=f"btn_{offre.get('id')}"):

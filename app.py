@@ -7,7 +7,7 @@ from openai import OpenAI
 st.set_page_config(page_title="Louis - Multi-Source Job d'Été", page_icon="💼", layout="wide")
 
 st.title("💼 Assistant Job d'Été Multi-Source")
-st.write("Ce bot recherche des contrats saisonniers de 1 mois (août) à Lille sur Jooble, Adzuna et France Travail, accessibles sans voiture.")
+st.write("Ce bot recherche des contrats saisonniers de 1 mois (août) à Lille sur Jooble, Adzuna, France Travail et LinkedIn (Apify), accessibles sans voiture.")
 
 # Barre latérale pour gérer les clés API
 st.sidebar.header("Configuration")
@@ -16,10 +16,10 @@ openai_key = st.sidebar.text_input("Clé API OpenRouter", type="password", place
 # Choix de la plateforme de recherche
 source_recherche = st.sidebar.selectbox(
     "Source de recherche d'emploi",
-    ["Jooble (Recommandé)", "Adzuna", "France Travail"]
+    ["Jooble (Recommandé)", "Adzuna", "France Travail", "LinkedIn (via Apify)"]
 )
 
-# Configuration dynamique des clés selon la source choisie
+# Configuration des clés
 jooble_key = "e81b59bc-ab6e-4e58-9841-a23ccdb6919f"
 adzuna_key = "5635953427e68b32d0b87e0166256c87"
 
@@ -31,6 +31,8 @@ elif source_recherche == "Adzuna":
 elif source_recherche == "France Travail":
     ft_client_id = st.sidebar.text_input("Client ID France Travail", type="password")
     ft_client_secret = st.sidebar.text_input("Client Secret France Travail", type="password")
+elif source_recherche == "LinkedIn (via Apify)":
+    apify_token = st.sidebar.text_input("Apify API Token (Requis)", type="password", placeholder="apify_api_...")
 
 # Informations du candidat (Louis Guiffant)
 PROFIL_LOUIS = {
@@ -46,7 +48,7 @@ PROFIL_LOUIS = {
 }
 
 # =====================================================================
-# FONCTIONS D'APPEL AUX APIS DE RECHERCHE D'EMPLOI
+# FONCTIONS D'APPEL AUX APIS
 # =====================================================================
 
 # 1. JOOBLE API
@@ -74,7 +76,7 @@ def filtrer_offres_jooble(offres):
 
     for item in offres:
         titre = item.get("title", "").lower()
-        desc = item.get("snippet", "").lower() # Jooble utilise 'snippet' pour la description
+        desc = item.get("snippet", "").lower()
 
         if any(mot in titre or mot in desc for mot in exclusions_alternance):
             continue
@@ -89,7 +91,7 @@ def filtrer_offres_jooble(offres):
             "entreprise": item.get("company", "Non spécifié"),
             "lieu": item.get("location", "Lille"),
             "description": item.get("snippet", ""),
-            "lien": item.get("link") # Lien direct de l'offre
+            "lien": item.get("link")
         })
     return valides
 
@@ -135,7 +137,7 @@ def filtrer_offres_adzuna(offres):
             "entreprise": item.get("company", {}).get("display_name", "Non spécifié"),
             "lieu": item.get("location", {}).get("display_name", "Lille"),
             "description": item.get("description", ""),
-            "lien": item.get("redirect_url") # Lien direct Adzuna
+            "lien": item.get("redirect_url")
         })
     return valides
 
@@ -207,8 +209,58 @@ def filtrer_offres_ft(offres):
         })
     return valides
 
+# 4. LINKEDIN VIA APIFY (SANS COOKIES)
+def recuperer_offres_linkedin(apify_token):
+    # Appel de l'acteur Apify officiel 'solidcode/linkedin-jobs-scraper' en mode synchrone
+    url = f"https://api.apify.com/v2/acts/solidcode~linkedin-jobs-scraper/run-sync-get-dataset-items?token={apify_token}"
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "keywords": "restauration",
+        "location": "Lille, France",
+        "maxResults": 15,
+        "datePosted": "any"
+    }
+    try:
+        r = requests.post(url, headers=headers, json=payload)
+        r.raise_for_status()
+        return r.json() # Retourne la liste d'offres brute du dataset
+    except Exception as e:
+        st.error(f"Erreur lors du scraping LinkedIn via Apify : {e}")
+        return []
+
+def filtrer_offres_linkedin(offres):
+    valides = []
+    exclusions_alternance = ["alternance", "apprentissage", "professionnalisation", "contrat pro", "apprenti", "alternant"]
+    exclusions_voiture = ["permis b exigé", "véhicule indispensable", "permis obligatoire", "voiture personnelle", "permis b obligatoire"]
+    exclusions_longs_contrats = ["6 mois", "12 mois", "un an", "1 an", "2 ans", "longue durée", "cdi", "durée indéterminée"]
+
+    for item in offres:
+        titre = item.get("title", "").lower()
+        desc = item.get("description", "").lower()
+
+        if any(mot in titre or mot in desc for mot in exclusions_alternance):
+            continue
+        if any(mot in titre or mot in desc for mot in exclusions_voiture):
+            continue
+        if any(mot in titre or mot in desc for mot in exclusions_longs_contrats):
+            continue
+
+        # Extraction propre du nom d'entreprise
+        entreprise_data = item.get("company", "Non spécifié")
+        nom_entreprise = entreprise_data.get("name", "Non spécifié") if isinstance(entreprise_data, dict) else str(entreprise_data)
+
+        valides.append({
+            "id": item.get("id"),
+            "titre": item.get("title"),
+            "entreprise": nom_entreprise,
+            "lieu": item.get("location", "Lille"),
+            "description": item.get("description", ""),
+            "lien": item.get("link") or f"https://www.linkedin.com/jobs/view/{item.get('id')}"
+        })
+    return valides
+
 # =====================================================================
-# SYSTEME DE GENERATION DE LETTRE
+# REEDACTION DE LA LETTRE
 # =====================================================================
 def generer_lettre(offre, key):
     client = OpenAI(
@@ -235,12 +287,12 @@ def generer_lettre(offre, key):
     Instructions :
     - Rédige en français. Sois poli, dynamique et motivé.
     - Précise que tu habites à Lille et que tu utilises les transports en commun métro/bus (pas besoin de voiture).
-    - IMPORTANT : Explique très clairement que tu proposes tes services spécifiquement pour le mois d'août 2026 pour un contrat de 1 mois (remplacement saisonnier idéal).
+    - IMPORTANT : Explique très clairement que tu proposes tes services spécifiquement pour le mois d'août 2026 pour un contrat de 1 mois (remplacement de vacances ou surcroît saisonnier idéal).
     - Fais court (environ 200 mots).
     """
     try:
         response = client.chat.completions.create(
-            model="openrouter/free",  # Utilise automatiquement le modèle gratuit du moment
+            model="openrouter/free",  # Sélection automatique d'un modèle gratuit actif
             messages=[
                 {"role": "system", "content": "Tu es un consultant en recrutement."},
                 {"role": "user", "content": prompt}
@@ -255,7 +307,6 @@ def generer_lettre(offre, key):
 # INTERFACE PRINCIPALE STREAMLIT
 # =====================================================================
 
-# Étape d'alerte si la clé OpenRouter n'est pas configurée
 if not openai_key:
     st.info("💡 Saisissez votre clé API OpenRouter dans la barre latérale pour activer la rédaction automatique de lettres de motivation.")
 
@@ -263,8 +314,8 @@ if not openai_key:
 if st.button(f"🔍 Rechercher les offres sur {source_recherche}"):
     offres_valides = []
 
-    with st.spinner("Recherche d'offres en cours..."):
-        # 1. Traitement Jooble
+    with st.spinner("Recherche d'offres en cours (cela peut prendre quelques secondes pour LinkedIn)..."):
+        # 1. Jooble
         if source_recherche == "Jooble (Recommandé)":
             if not api_jooble:
                 st.warning("Veuillez saisir votre clé API Jooble.")
@@ -272,7 +323,7 @@ if st.button(f"🔍 Rechercher les offres sur {source_recherche}"):
                 offres_brutes = recuperer_offres_jooble(api_jooble)
                 offres_valides = filtrer_offres_jooble(offres_brutes)
 
-        # 2. Traitement Adzuna
+        # 2. Adzuna
         elif source_recherche == "Adzuna":
             if not api_adzuna_id or not api_adzuna_key:
                 st.warning("Veuillez saisir votre App ID et App Key pour Adzuna.")
@@ -280,7 +331,7 @@ if st.button(f"🔍 Rechercher les offres sur {source_recherche}"):
                 offres_brutes = recuperer_offres_adzuna(api_adzuna_id, api_adzuna_key)
                 offres_valides = filtrer_offres_adzuna(offres_brutes)
 
-        # 3. Traitement France Travail
+        # 3. France Travail
         elif source_recherche == "France Travail":
             if not ft_client_id or not ft_client_secret:
                 st.warning("Veuillez configurer vos accès France Travail.")
@@ -290,14 +341,22 @@ if st.button(f"🔍 Rechercher les offres sur {source_recherche}"):
                     offres_brutes = recuperer_offres_ft(token)
                     offres_valides = filtrer_offres_ft(offres_brutes)
 
-        # Sauvegarde en mémoire session de Streamlit
+        # 4. LinkedIn via Apify
+        elif source_recherche == "LinkedIn (via Apify)":
+            if not apify_token:
+                st.warning("Veuillez renseigner votre API Token d'Apify.")
+            else:
+                offres_brutes = recuperer_offres_linkedin(apify_token)
+                offres_valides = filtrer_offres_linkedin(offres_brutes)
+
+        # Sauvegarde en mémoire de session
         st.session_state["offres_web"] = offres_valides
         if offres_valides:
             st.success(f"{len(offres_valides)} offres d'emploi validées (CDD d'août sans permis ni voiture) !")
         else:
-            st.error("Aucune offre valide trouvée avec vos critères de recherche.")
+            st.error("Aucune offre valide trouvée correspondant à vos critères d'accessibilité.")
 
-# Affichage dynamique des résultats et bouton de rédaction
+# Affichage des résultats
 if "offres_web" in st.session_state and st.session_state["offres_web"]:
     for index, offre in enumerate(st.session_state["offres_web"]):
         titre = offre.get('titre')

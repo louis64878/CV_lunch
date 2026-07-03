@@ -135,7 +135,7 @@ def generer_lettre(offre, key):
     """
     try:
         response = client.chat.completions.create(
-            model="meta-llama/llama-3-8b-instruct:free",
+            model="openrouter/free"
             messages=[
                 {"role": "system", "content": "Tu es un consultant en recrutement."},
                 {"role": "user", "content": prompt}

@@ -51,7 +51,7 @@ PROFIL_LOUIS = {
 
 # 1. JOOBLE API
 def recuperer_offres_jooble(api_key):
-    url = f"https://jooble.org/api/{api_key}"
+    url = f"https://fr.jooble.org/api/{api_key}"
     headers = {"Content-Type": "application/json"}
     payload = {
         "keywords": "restauration",

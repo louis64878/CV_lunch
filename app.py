@@ -287,7 +287,7 @@ if st.button(f"🔍 Rechercher les offres sur {source_recherche}"):
             else:
                 token = obtenir_token_ft(ft_client_id, ft_client_secret)
                 if token:
-                    offres_brutes = recuperer_ft(token)
+                    offres_brutes = recuperer_offres_ft(token)
                     offres_valides = filtrer_offres_ft(offres_brutes)
 
         # Sauvegarde en mémoire session de Streamlit

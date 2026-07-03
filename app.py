@@ -22,6 +22,7 @@ PROFIL_LOUIS = {
     "telephone": "0768445324",
     "ville": "Lille",
     "etudes": "École d'ingénieur au CESI",
+    "disponibilite": "Disponible uniquement durant tout le mois d'août 2026",
     "competences": "Restauration, service en salle, polyvalence, sens du contact, dynamique, rigoureux",
     "langues": "Français (Langue maternelle), Anglais (Courant)",
     "experiences": "Bénévole (organisation d'événements, vente), stages d'observation en entreprise (Airbus Atlantic, prothésiste)"

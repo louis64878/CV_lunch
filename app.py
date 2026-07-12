@@ -4,11 +4,6 @@ import os
 from bs4 import BeautifulSoup
 from openai import OpenAI
 
-# =====================================================================
-# ENREGISTREZ VOTRE CLÉ OPENROUTER ICI POUR QU'ELLE SOIT PRÉ-REMPLIE
-# =====================================================================
-CLE_OPENROUTER_PAR_DEFAUT = "sk-or-v1-VOTRE_CLE_REELLE" # <--- Remplacez par votre clé sk-or-v1...
-
 # Configuration de la page web
 st.set_page_config(page_title="Louis - Multi-Source Job d'Été", page_icon="💼", layout="wide")
 
@@ -25,8 +20,8 @@ mode_utilisation = st.sidebar.radio(
 st.sidebar.write("---")
 st.sidebar.header("Configuration des Clés API")
 
-# Utilise la clé par défaut si elle est configurée
-openai_key = st.sidebar.text_input("Clé API OpenRouter", value=CLE_OPENROUTER_PAR_DEFAUT, type="password")
+# Demande la clé OpenRouter de manière sécurisée (champ vide à chaque connexion)
+openai_key = st.sidebar.text_input("Clé API OpenRouter", type="password", placeholder="sk-or-v1-...")
 
 # Paramètres selon le mode choisi
 if mode_utilisation == "🔍 Recherche automatique":
@@ -35,7 +30,7 @@ if mode_utilisation == "🔍 Recherche automatique":
         ["Jooble (Recommandé)", "Adzuna", "France Travail", "LinkedIn (via Apify)"]
     )
     
-    # Clés API pré-remplies
+    # Clés API d'offres pré-remplies
     jooble_key = "e81b59bc-ab6e-4e58-9841-a23ccdb6919f"
     adzuna_key = "5635953427e68b32d0b87e0166256c87"
 
@@ -70,19 +65,19 @@ PROFIL_LOUIS = {
 def extraire_texte_url(url):
     """Tente d'ouvrir un lien d'annonce et de nettoyer le texte pour l'IA."""
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     try:
         r = requests.get(url, headers=headers, timeout=10)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
         
-        # Supprime le code javascript et CSS inutile
+        # Supprime le code javascript, CSS, pied de page et en-tête inutile
         for element in soup(["script", "style", "nav", "footer", "header"]):
             element.decompose()
             
         texte_brut = soup.get_text(separator="\n")
-        # Nettoyage des espaces blancs multiples
+        # Nettoyage des lignes vides et des espaces multiples
         lignes = (line.strip() for line in texte_brut.splitlines())
         blocs = (phrase.strip() for line in lignes for phrase in line.split("  "))
         texte_propre = "\n".join(b for b in blocs if b)
@@ -298,7 +293,7 @@ def filtrer_offres_linkedin(offres):
     return valides
 
 # =====================================================================
-# SYSTEME DE GENERATION DE LETTRE
+# RÈDACTION DE LA LETTRE
 # =====================================================================
 def generer_lettre(offre, key):
     client = OpenAI(
@@ -345,7 +340,7 @@ def generer_lettre(offre, key):
 # INTERFACE PRINCIPALE STREAMLIT
 # =====================================================================
 
-if not openai_key or "VOTRE_CLE" in openai_key:
+if not openai_key:
     st.info("💡 Saisissez votre clé API OpenRouter dans la barre latérale pour activer la rédaction de lettres de motivation.")
 
 # MODE 1 : RECHERCHE AUTOMATIQUE
@@ -405,8 +400,8 @@ if mode_utilisation == "🔍 Recherche automatique":
                 st.text_area("Description du poste", offre.get("description", ""), height=150, disabled=True, key=f"desc_{offre.get('id')}_{index}")
                 
                 if st.button("✨ Rédiger ma lettre de motivation", key=f"btn_{offre.get('id')}_{index}"):
-                    if not openai_key or "VOTRE_CLE" in openai_key:
-                        st.error("Action impossible : Entrez votre clé OpenRouter valide dans la barre latérale.")
+                    if not openai_key:
+                        st.error("Action impossible : Entrez votre clé OpenRouter dans la barre latérale.")
                     else:
                         with st.spinner("Rédaction en cours par l'IA..."):
                             lettre_redigee = generer_lettre(offre, openai_key)
@@ -449,8 +444,8 @@ elif mode_utilisation == "✍️ Rédiger depuis une annonce copiée":
     )
 
     if st.button("✨ Rédiger ma lettre de motivation sur mesure"):
-        if not openai_key or "VOTRE_CLE" in openai_key:
-            st.error("Action impossible : Veuillez d'abord renseigner votre clé OpenRouter valide dans la barre latérale gauche.")
+        if not openai_key:
+            st.error("Action impossible : Veuillez d'abord renseigner votre clé OpenRouter dans la barre latérale gauche.")
         elif not titre_saisi or not description_saisie:
             st.warning("Veuillez renseigner au moins l'intitulé du poste et la description de l'annonce.")
         else:
